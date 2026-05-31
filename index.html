@@ -2208,14 +2208,17 @@ function initStage4() {
     </div>`;
   }).join('');
 
-  // Card mapping preview in controls
-  document.getElementById('card-mapping-preview').innerHTML = Object.keys(appState.mappings).map(fold => {
-    const m = appState.mappings[fold];
-    return `<div class="card-fold-row mb-8">
-      <span class="dot" style="background:${foldColors[fold]};"></span>
-      <span class="text-sm"><strong>${foldLabels[fold]}</strong>: ${m.instrument}, ${m.dynamics}, ${m.beat}, ${m.rhythm}</span>
-    </div>`;
-  }).join('');
+  // Card mapping preview in controls (optional — only rendered if present)
+  const mappingPreviewEl = document.getElementById('card-mapping-preview');
+  if (mappingPreviewEl) {
+    mappingPreviewEl.innerHTML = Object.keys(appState.mappings).map(fold => {
+      const m = appState.mappings[fold];
+      return `<div class="card-fold-row mb-8">
+        <span class="dot" style="background:${foldColors[fold]};"></span>
+        <span class="text-sm"><strong>${foldLabels[fold]}</strong>: ${m.instrument}, ${m.dynamics}, ${m.beat}, ${m.rhythm}</span>
+      </div>`;
+    }).join('');
+  }
 
   // Initialize card viewer if needed
   if (!cardViewerInitialized) {
