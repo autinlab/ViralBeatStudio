@@ -1115,18 +1115,22 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
   <h2 class="stage-title">Stage 5 — Save & Share</h2>
   <p class="stage-desc">Export your session or present to the class.</p>
 
-  <div class="two-col">
+  <div style="display:grid;grid-template-columns:1fr 380px;gap:28px;align-items:start;">
+
+    <!-- LEFT: name, mini dance, Mol* capsid, export -->
     <div>
-      <div class="panel mb-16">
+      <div class="panel mb-14">
         <div class="section-title mb-8">Your Name</div>
         <input class="ctrl-input" id="student-name-input" placeholder="Enter your name..." oninput="updateStudentName(this.value)">
       </div>
 
-      <div class="success-card mb-16" id="success-summary">
-        <h3 style="font-size:1.1rem;margin-bottom:8px;" id="summary-virus-title"></h3>
-        <p class="text-sm" id="summary-student"></p>
-        <hr class="divider" style="border-color:rgba(0,0,0,0.1);">
-        <div id="summary-mappings-overview"></div>
+      <!-- Mini dancing capsid + Mol* viewer -->
+      <div class="panel mb-14" style="background:#0e1220;border:none;padding:0;overflow:hidden;border-radius:14px;">
+        <div style="position:relative;">
+          <canvas id="s5-dance-canvas" width="400" height="160" style="display:block;width:100%;"></canvas>
+          <div style="position:absolute;top:8px;left:10px;font-size:0.6rem;text-transform:uppercase;letter-spacing:.08em;color:rgba(180,210,255,0.45);font-family:'Lora',serif;">Live Capsid</div>
+        </div>
+        <div id="stage-5-viewer-slot" style="height:240px;"></div>
       </div>
 
       <div class="section-title mb-12">Export Options</div>
@@ -1135,14 +1139,13 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
         <button class="btn btn-sky" onclick="downloadCardPNG()">🖼 Download Card PNG</button>
         <button class="btn btn-lavender" onclick="copyShareLink()">🔗 Copy Share Link</button>
       </div>
-
       <hr class="divider">
       <button class="btn btn-rose" onclick="enterPresentation()" style="margin-top:8px;">🎤 Present to Class</button>
     </div>
 
-    <div>
-      <div class="viewer-slot" id="stage-5-viewer-slot" style="height:300px;"></div>
-    </div>
+    <!-- RIGHT: final trading card -->
+    <div id="s5-card-wrap" style="display:flex;justify-content:center;"></div>
+
   </div>
 </div>
 
@@ -2353,17 +2356,43 @@ async function captureCard() {
 // ============================================================
 // STAGE 5 — SAVE & SHARE
 // ============================================================
+let s5DanceAnimId = null;
+let s5M = [1,0,0, 0,1,0, 0,0,1];
+const s5MulM3 = (A,B) => [
+  A[0]*B[0]+A[1]*B[3]+A[2]*B[6], A[0]*B[1]+A[1]*B[4]+A[2]*B[7], A[0]*B[2]+A[1]*B[5]+A[2]*B[8],
+  A[3]*B[0]+A[4]*B[3]+A[5]*B[6], A[3]*B[1]+A[4]*B[4]+A[5]*B[7], A[3]*B[2]+A[4]*B[5]+A[5]*B[8],
+  A[6]*B[0]+A[7]*B[3]+A[8]*B[6], A[6]*B[1]+A[7]*B[4]+A[8]*B[7], A[6]*B[2]+A[7]*B[5]+A[8]*B[8]
+];
+
 function initStage5() {
-  const virus = appState.selectedVirus;
   document.getElementById('student-name-input').value = appState.studentName;
-  document.getElementById('summary-virus-title').textContent = virus ? virus.name : 'Unknown Virus';
-  document.getElementById('summary-student').textContent = appState.studentName ? `Student: ${appState.studentName}` : 'No name entered';
-  updateMappingsOverview();
+
+  // Move trading card into Stage 5 right column
+  const card = document.getElementById('trading-card');
+  const wrap = document.getElementById('s5-card-wrap');
+  if (card && wrap && !wrap.contains(card)) wrap.appendChild(card);
+
+  // Resize s5-dance-canvas to its display width
+  const dc = document.getElementById('s5-dance-canvas');
+  if (dc) { dc.width = dc.offsetWidth || 400; }
+
+  // Start mini dance loop
+  cancelAnimationFrame(s5DanceAnimId);
+  s5M = [1,0,0, 0,1,0, 0,0,1];
+  const Ry5 = (() => { const s=0.006,c=Math.cos(s),si=Math.sin(s); return [c,0,si,0,1,0,-si,0,c]; })();
+  function s5Frame() {
+    s5M = s5MulM3(Ry5, s5M);
+    const canvas = document.getElementById('s5-dance-canvas');
+    if (canvas && window.drawDodecFrame) {
+      window.drawDodecFrame(canvas, s5M, danceSmooth, appState.movements, true);
+    }
+    s5DanceAnimId = requestAnimationFrame(s5Frame);
+  }
+  s5Frame();
 }
 
 function updateStudentName(val) {
   appState.studentName = val;
-  document.getElementById('summary-student').textContent = val ? `Student: ${val}` : 'No name entered';
   saveSession();
 }
 
@@ -2529,9 +2558,16 @@ function showStage(n) {
   const el = document.getElementById('stage-' + n);
   if (el) el.classList.add('active');
 
-  // Stop dance if navigating away from it
+  // Stop any running loops when navigating away
   if (appState.currentStage === 'dance') stopDanceStage();
   if (appState.currentStage === 3) stopStage3();
+  // Stop Stage 5 mini-dance and return trading card to Stage 4
+  if (appState.currentStage === 5) {
+    cancelAnimationFrame(s5DanceAnimId); s5DanceAnimId = null;
+    const card = document.getElementById('trading-card');
+    const s4 = document.querySelector('#stage-4 .stage4-layout > div:first-child');
+    if (card && s4 && !s4.contains(card)) s4.insertBefore(card, s4.firstChild);
+  }
 
   // Move viewer to appropriate slot
   const slotMap = { 0: null, 1: 'stage-1-viewer-slot', 2: null, 3: null, dance: 'stage-dance-viewer-slot', 4: 'molstar-card-slot', 5: 'stage-5-viewer-slot' };
