@@ -193,6 +193,11 @@ h1,h2,h3,h4{font-family:'Playfair Display',serif;}
 .card-funfact-area{flex:1;min-height:46px;resize:none;border:none;border-bottom:1.5px solid var(--cream-dark);padding:5px 2px;font-family:'Lora',serif;font-size:0.83rem;color:var(--text);outline:none;background:transparent;width:100%;}
 .card-funfact-area:focus{border-bottom-color:var(--sage);}
 .card-input-label{font-size:0.68rem;color:var(--text-light);margin-bottom:2px;flex-shrink:0;}
+.card-compact-row{display:flex;gap:6px;flex-shrink:0;margin-bottom:6px;}
+.card-compact-cell{flex:1;min-width:0;}
+.card-input-sm{width:100%;border:none;border-bottom:1.5px solid var(--cream-dark);padding:3px 2px;font-family:'Lora',serif;font-size:0.75rem;color:var(--text);outline:none;background:transparent;}
+.card-input-sm:focus{border-bottom-color:var(--sage);}
+.card-input-label-sm{font-size:0.60rem;color:var(--text-light);margin-bottom:1px;}
 .card-bottom{background:var(--cream);padding:12px 14px;border-top:1px solid var(--cream-dark);}
 .card-fold-row{display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-mid);margin-bottom:6px;}
 .card-controls{padding:8px 0;}
@@ -1000,11 +1005,21 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
               <input class="card-t-input" id="card-t" placeholder="T=?" oninput="updateCard('tSymmetry',this.value)">
             </div>
           </div>
-          <!-- Subunits + genome fields -->
-          <div class="card-input-label">Subunits</div>
-          <input class="card-input" id="card-subunits" placeholder="# subunits" oninput="updateCard('subunits',this.value)">
-          <div class="card-input-label">RNA / DNA Length</div>
-          <input class="card-input" id="card-rnadna" placeholder="e.g. 4.7 kb" oninput="updateCard('rnaDna',this.value)">
+          <!-- Compact stats row: Subunits · Unique Proteins · RNA/DNA -->
+          <div class="card-compact-row">
+            <div class="card-compact-cell">
+              <div class="card-input-label-sm">Subunits</div>
+              <input class="card-input-sm" id="card-subunits" placeholder="e.g. 240" oninput="updateCard('subunits',this.value)">
+            </div>
+            <div class="card-compact-cell">
+              <div class="card-input-label-sm">Unique Proteins</div>
+              <input class="card-input-sm" id="card-proteins" placeholder="e.g. 1" oninput="updateCard('proteins',this.value)">
+            </div>
+            <div class="card-compact-cell">
+              <div class="card-input-label-sm">RNA / DNA</div>
+              <input class="card-input-sm" id="card-rnadna" placeholder="e.g. 4.7 kb" oninput="updateCard('rnaDna',this.value)">
+            </div>
+          </div>
           <!-- Habitat / Role fields -->
           <div class="card-input-label">Habitat / Host</div>
           <input class="card-input" id="card-habitat" placeholder="Where does this virus live?" oninput="updateCard('habitat',this.value)">
@@ -1068,6 +1083,11 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
         <div class="ctrl-group">
           <label class="ctrl-label">Number of Subunits</label>
           <input class="ctrl-input" id="ctrl-subunits" oninput="syncCardField('subunits','card-subunits',this.value)">
+        </div>
+        <div class="ctrl-group">
+          <label class="ctrl-label">Unique Capsid Proteins</label>
+          <input class="ctrl-input" id="ctrl-proteins" placeholder="e.g. 1" oninput="syncCardField('proteins','card-proteins',this.value)">
+          <p class="text-sm text-light" style="margin-top:4px;">How many different protein types build the whole capsid? (usually 1–3 — viruses are incredibly efficient!)</p>
         </div>
         <div class="ctrl-group">
           <label class="ctrl-label">RNA / DNA Length</label>
@@ -2197,12 +2217,14 @@ function initStage4() {
 
   document.getElementById('card-virus-title').textContent = virus.name;
 
-  // Auto-compute subunits from T number
-  const autoSubunits = appState.card.subunits || String(60 * virus.t);
+  // Auto-compute subunits from T number; default 1 unique protein (most simple icosahedral viruses)
+  const autoSubunits  = appState.card.subunits  || String(60 * virus.t);
+  const autoProteins  = appState.card.proteins  || '1';
 
   // Fill card inputs
   document.getElementById('card-t').value        = appState.card.tSymmetry || `T = ${virus.t}`;
   document.getElementById('card-subunits').value  = autoSubunits;
+  document.getElementById('card-proteins').value  = autoProteins;
   document.getElementById('card-rnadna').value    = appState.card.rnaDna    || '';
   document.getElementById('card-habitat').value   = appState.card.habitat   || virus.host;
   document.getElementById('card-disease').value   = appState.card.disease   || '';
@@ -2211,13 +2233,15 @@ function initStage4() {
   // Fill control-panel inputs
   document.getElementById('ctrl-t').value        = appState.card.tSymmetry || `T = ${virus.t}`;
   document.getElementById('ctrl-subunits').value  = autoSubunits;
+  document.getElementById('ctrl-proteins').value  = autoProteins;
   document.getElementById('ctrl-rnadna').value    = appState.card.rnaDna    || '';
   document.getElementById('ctrl-habitat').value   = appState.card.habitat   || virus.host;
   document.getElementById('ctrl-disease').value   = appState.card.disease   || '';
   document.getElementById('ctrl-funfact').value   = appState.card.funFact   || '';
 
-  // Persist auto-filled subunits if not already saved
+  // Persist auto-filled values if not already saved
   if (!appState.card.subunits) appState.card.subunits = autoSubunits;
+  if (!appState.card.proteins) appState.card.proteins = autoProteins;
 
   // Card mapping preview in controls (optional — only rendered if present)
   const foldColors = { fold2: '#E8937F', fold3: '#8FAF8F', fold5: '#C3B1D9' };
