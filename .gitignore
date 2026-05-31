@@ -1,0 +1,2 @@
+# Mol* source maps — debugging only, not needed at runtime
+viewer/*.map
