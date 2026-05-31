@@ -1116,20 +1116,44 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
 
   <div style="display:grid;grid-template-columns:1fr 380px;gap:28px;align-items:start;">
 
-    <!-- LEFT: name, mini dance, Mol* capsid, export -->
+    <!-- LEFT: name + mini dance stage + export -->
     <div>
-      <div class="panel mb-14">
+      <div class="panel mb-12">
         <div class="section-title mb-8">Your Name</div>
         <input class="ctrl-input" id="student-name-input" placeholder="Enter your name..." oninput="updateStudentName(this.value)">
       </div>
 
-      <!-- Mini dancing capsid + Mol* viewer -->
-      <div class="panel mb-14" style="background:#0e1220;border:none;padding:0;overflow:hidden;border-radius:14px;">
-        <div style="position:relative;">
-          <canvas id="s5-dance-canvas" width="400" height="160" style="display:block;width:100%;"></canvas>
-          <div style="position:absolute;top:8px;left:10px;font-size:0.6rem;text-transform:uppercase;letter-spacing:.08em;color:rgba(180,210,255,0.45);font-family:'Lora',serif;">Live Capsid</div>
+      <!-- ── Mini dance stage ────────────────────────────────────────────── -->
+      <div style="background:#080d1a;border-radius:14px;overflow:hidden;margin-bottom:14px;">
+
+        <!-- Mol* viewer with dodecahedron guide overlay -->
+        <div style="position:relative;height:280px;">
+          <div id="stage-5-viewer-slot" style="width:100%;height:100%;"></div>
+
+          <!-- Axis glow overlay -->
+          <canvas id="s5-glow-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>
+
+          <!-- Symmetry guide — top-right corner -->
+          <div style="position:absolute;top:10px;right:10px;background:rgba(8,13,26,0.88);border:1px solid rgba(255,255,255,0.10);border-radius:10px;padding:6px 8px 4px;backdrop-filter:blur(3px);">
+            <div style="font-size:0.58rem;text-transform:uppercase;letter-spacing:.07em;color:rgba(200,220,255,0.45);font-family:'Lora',serif;text-align:center;margin-bottom:3px;">Symmetry Guide</div>
+            <canvas id="s5-dance-canvas" width="160" height="120" style="display:block;border-radius:6px;"></canvas>
+          </div>
+
+          <!-- Virus name label -->
+          <div id="s5-virus-label" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:0.66rem;color:rgba(255,255,255,0.48);font-family:'Lora',serif;pointer-events:none;"></div>
         </div>
-        <div id="stage-5-viewer-slot" style="height:240px;"></div>
+
+        <!-- Frequency spectrum -->
+        <canvas id="s5-spectrum-canvas" style="display:block;width:100%;height:48px;"></canvas>
+
+        <!-- Play controls -->
+        <div style="padding:8px 14px 10px;display:flex;align-items:center;gap:10px;">
+          <button id="s5-play-btn" onclick="toggleS5Audio()" style="flex-shrink:0;padding:7px 20px;border-radius:8px;border:none;background:var(--sage);color:white;font-family:'Lora',serif;font-size:0.84rem;font-weight:700;cursor:pointer;">▶ Play</button>
+          <input type="range" id="s5-scrubber" min="0" max="100" value="0" step="0.1"
+            style="flex:1;accent-color:var(--sage-dark);cursor:pointer;"
+            oninput="s5SeekAudio(this.value)" onmousedown="s5ScrubStart()" onmouseup="s5ScrubEnd()">
+          <span id="s5-time" style="font-size:0.72rem;color:rgba(255,255,255,0.5);font-family:'Lora',serif;flex-shrink:0;">0:00</span>
+        </div>
       </div>
 
       <div class="section-title mb-12">Export Options</div>
@@ -2357,6 +2381,7 @@ async function captureCard() {
 // ============================================================
 let s5DanceAnimId = null;
 let s5M = [1,0,0, 0,1,0, 0,0,1];
+let s5Scrubbing = false;
 const s5MulM3 = (A,B) => [
   A[0]*B[0]+A[1]*B[3]+A[2]*B[6], A[0]*B[1]+A[1]*B[4]+A[2]*B[7], A[0]*B[2]+A[1]*B[5]+A[2]*B[8],
   A[3]*B[0]+A[4]*B[3]+A[5]*B[6], A[3]*B[1]+A[4]*B[4]+A[5]*B[7], A[3]*B[2]+A[4]*B[5]+A[5]*B[8],
@@ -2366,19 +2391,21 @@ const s5MulM3 = (A,B) => [
 function initStage5() {
   document.getElementById('student-name-input').value = appState.studentName;
 
+  // Virus label
+  const lbl = document.getElementById('s5-virus-label');
+  if (lbl && appState.selectedVirus) lbl.textContent = appState.selectedVirus.name;
+
   // Move trading card into Stage 5 right column
   const card = document.getElementById('trading-card');
   const wrap = document.getElementById('s5-card-wrap');
   if (card && wrap && !wrap.contains(card)) wrap.appendChild(card);
 
-  // Populate the trading card's viewer section with a screenshot of the capsid.
-  // Use the already-captured snapshot if available, otherwise auto-capture now.
+  // Populate card viewer with snapshot (auto-capture if needed)
   const slot = document.getElementById('molstar-card-slot');
   if (slot) {
     if (appState.card.snapshot) {
       slot.innerHTML = `<img src="${appState.card.snapshot}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
     } else if (mainViewer) {
-      // Auto-capture so the card always shows the capsid even if student skipped 📸
       mainViewer.plugin.helpers.viewportScreenshot?.getImageDataUri().then(imgData => {
         if (imgData && slot) {
           slot.innerHTML = `<img src="${imgData}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
@@ -2388,24 +2415,106 @@ function initStage5() {
     }
   }
 
-  // Resize s5-dance-canvas to its display width
-  const dc = document.getElementById('s5-dance-canvas');
-  if (dc) { dc.width = dc.offsetWidth || 400; }
+  // Sync play button state with audio element
+  const audioEl = document.getElementById('audio-el');
+  const pb = document.getElementById('s5-play-btn');
+  if (pb) pb.textContent = (audioEl && !audioEl.paused) ? '⏸ Pause' : '▶ Play';
+  if (audioEl) {
+    const scr = document.getElementById('s5-scrubber');
+    if (scr && audioEl.duration) { scr.max = audioEl.duration; scr.value = audioEl.currentTime; }
+    audioEl.addEventListener('timeupdate', () => {
+      if (s5Scrubbing || appState.currentStage !== 5) return;
+      const s = document.getElementById('s5-scrubber');
+      const t = document.getElementById('s5-time');
+      if (s) s.value = audioEl.currentTime;
+      if (t) t.textContent = formatTime(audioEl.currentTime);
+    });
+    audioEl.addEventListener('ended', () => {
+      const b = document.getElementById('s5-play-btn');
+      if (b) b.textContent = '▶ Play';
+    });
+  }
 
-  // Start mini dance loop
+  // Start mini dance + spectrum loop
   cancelAnimationFrame(s5DanceAnimId);
   s5M = [1,0,0, 0,1,0, 0,0,1];
-  const Ry5 = (() => { const s=0.006,c=Math.cos(s),si=Math.sin(s); return [c,0,si,0,1,0,-si,0,c]; })();
+  const Ry5 = (() => { const s=0.005,c=Math.cos(s),si=Math.sin(s); return [c,0,si,0,1,0,-si,0,c]; })();
+
   function s5Frame() {
+    // Update audio bands into danceSmooth
+    const raw = danceGetBands();
+    const alpha = 0.25;
+    const keys = ['bass','mid','treble','beat','piano','mezzoforte','forte'];
+    keys.forEach(k => {
+      const r = raw[k] || 0;
+      danceSmooth[k] = Math.max(r, (danceSmooth[k]||0)*0.82)*(1-alpha) + r*alpha;
+    });
+
+    // Spin and draw symmetry guide
     s5M = s5MulM3(Ry5, s5M);
-    const canvas = document.getElementById('s5-dance-canvas');
-    if (canvas && window.drawDodecFrame) {
-      window.drawDodecFrame(canvas, s5M, danceSmooth, appState.movements, true);
+    const dc = document.getElementById('s5-dance-canvas');
+    if (dc && window.drawDodecFrame) window.drawDodecFrame(dc, s5M, danceSmooth, appState.movements, true);
+
+    // Draw frequency spectrum
+    const sc = document.getElementById('s5-spectrum-canvas');
+    if (sc && danceAnalyser) {
+      const W = sc.offsetWidth; const H = sc.offsetHeight || 48;
+      if (sc.width !== W || sc.height !== H) { sc.width = W; sc.height = H; }
+      const ctx = sc.getContext('2d'); ctx.clearRect(0,0,W,H);
+      const data = new Uint8Array(danceAnalyser.frequencyBinCount);
+      danceAnalyser.getByteFrequencyData(data);
+      const BARS = 72, bW = W/BARS, mvs = appState.movements;
+      const MV_RGB = { open5fold:[155,114,207], open3fold:[61,170,106], open2fold:[232,98,74], wiggle:[232,196,74], pulse:[74,181,232] };
+      const bassEnd = Math.floor(data.length*freqSplitBassM), midEnd = Math.floor(data.length*freqSplitMidT);
+      for (let i=0;i<BARS;i++) {
+        const bin = Math.floor(i/BARS*data.length*0.60);
+        const val = data[bin]/255; if (val<0.015) continue;
+        const band = bin<bassEnd?'bass':bin<midEnd?'mid':'treble';
+        const [r,g,b] = MV_RGB[mvs?.[band]?.movement]||[110,150,195];
+        const h = val*H*0.9, x = i*bW;
+        const grad = ctx.createLinearGradient(x,H-h,x,H);
+        grad.addColorStop(0,`rgba(${r},${g},${b},0.9)`);
+        grad.addColorStop(1,`rgba(${r},${g},${b},0.05)`);
+        ctx.fillStyle = grad; ctx.fillRect(x+0.5,H-h,bW-1,h);
+      }
     }
+
+    // Apply CSS glow to Mol* viewer based on active axis
+    applyMolstarDanceEffect(danceSmooth, appState.movements);
+
     s5DanceAnimId = requestAnimationFrame(s5Frame);
   }
   s5Frame();
 }
+
+function toggleS5Audio() {
+  const audioEl = document.getElementById('audio-el');
+  const btn = document.getElementById('s5-play-btn');
+  if (!audioEl || !appState.audioFile) { showToast('No track loaded'); return; }
+  // Ensure audio analyser is set up (reuse dance stage setup)
+  if (!danceAudioCtx) {
+    danceAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    danceAnalyser = danceAudioCtx.createAnalyser();
+    danceAnalyser.fftSize = 512;
+  }
+  if (!danceAudioSource) {
+    try {
+      danceAudioSource = danceAudioCtx.createMediaElementSource(audioEl);
+      danceAudioSource.connect(danceAnalyser);
+      danceAnalyser.connect(danceAudioCtx.destination);
+    } catch(e) {}
+  }
+  if (audioEl.paused) {
+    danceAudioCtx.resume().then(() => audioEl.play().catch(()=>{}));
+    if (btn) btn.textContent = '⏸ Pause';
+  } else {
+    audioEl.pause();
+    if (btn) btn.textContent = '▶ Play';
+  }
+}
+function s5ScrubStart() { s5Scrubbing = true; }
+function s5ScrubEnd()   { s5Scrubbing = false; const ae = document.getElementById('audio-el'), s = document.getElementById('s5-scrubber'); if(ae&&s) ae.currentTime = parseFloat(s.value); }
+function s5SeekAudio(v) { const t = document.getElementById('s5-time'); if(t) t.textContent = formatTime(parseFloat(v)); }
 
 function updateStudentName(val) {
   appState.studentName = val;
