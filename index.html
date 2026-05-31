@@ -2372,6 +2372,23 @@ function initStage5() {
   const wrap = document.getElementById('s5-card-wrap');
   if (card && wrap && !wrap.contains(card)) wrap.appendChild(card);
 
+  // Populate the trading card's viewer section with a screenshot of the capsid.
+  // Use the already-captured snapshot if available, otherwise auto-capture now.
+  const slot = document.getElementById('molstar-card-slot');
+  if (slot) {
+    if (appState.card.snapshot) {
+      slot.innerHTML = `<img src="${appState.card.snapshot}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+    } else if (mainViewer) {
+      // Auto-capture so the card always shows the capsid even if student skipped 📸
+      mainViewer.plugin.helpers.viewportScreenshot?.getImageDataUri().then(imgData => {
+        if (imgData && slot) {
+          slot.innerHTML = `<img src="${imgData}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+          appState.card.snapshot = imgData;
+        }
+      }).catch(() => {});
+    }
+  }
+
   // Resize s5-dance-canvas to its display width
   const dc = document.getElementById('s5-dance-canvas');
   if (dc) { dc.width = dc.offsetWidth || 400; }
