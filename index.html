@@ -1127,7 +1127,7 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
       <div style="background:#080d1a;border-radius:14px;overflow:hidden;margin-bottom:14px;">
 
         <!-- Mol* viewer with dodecahedron guide overlay -->
-        <div style="position:relative;height:280px;">
+        <div id="s5-viewer-wrap" style="position:relative;height:280px;transform-origin:center center;overflow:hidden;">
           <div id="stage-5-viewer-slot" style="width:100%;height:100%;"></div>
 
           <!-- Axis glow overlay -->
@@ -2435,6 +2435,16 @@ function initStage5() {
     });
   }
 
+  // Capture camera base radius and stop autonomous spin
+  appState.danceBaseRadius = null;
+  setTimeout(() => {
+    try {
+      const r = mainViewer?.plugin?.canvas3d?.camera?.state?.radius;
+      if (r) appState.danceBaseRadius = r;
+      mainViewer?.plugin?.canvas3d?.setProps({ trackball: { animate: { name: 'off', params: {} } } });
+    } catch(e) {}
+  }, 350);
+
   // Start mini dance + spectrum loop
   cancelAnimationFrame(s5DanceAnimId);
   s5M = [1,0,0, 0,1,0, 0,0,1];
@@ -2479,8 +2489,58 @@ function initStage5() {
       }
     }
 
-    // Apply CSS glow to Mol* viewer based on active axis
-    applyMolstarDanceEffect(danceSmooth, appState.movements);
+    // ── Mol* camera sync from s5M (same as danceLoop uses danceM) ─────────
+    try {
+      const cam = mainViewer?.plugin?.canvas3d?.camera;
+      if (cam && cam.state && appState.danceBaseRadius) {
+        const base = appState.danceBaseRadius;
+        const tgt  = cam.state.target;
+        const tx2  = tgt?.[0]||0, ty2 = tgt?.[1]||0, tz2 = tgt?.[2]||0;
+        const r    = cam.state.radius ?? base;
+        const px = s5M[2]*r + tx2, py = s5M[5]*r + ty2, pz = s5M[8]*r + tz2;
+        const pos = cam.state.position, up = cam.state.up;
+        if (pos && up) {
+          pos[0]=px; pos[1]=py; pos[2]=pz;
+          up[0]=s5M[1]; up[1]=s5M[4]; up[2]=s5M[7];
+          cam.setState?.({ ...cam.state });
+        }
+      }
+    } catch(e) {}
+
+    // ── CSS fold-axis effects on Stage 5 viewer wrapper ────────────────────
+    const s5wrap = document.getElementById('s5-viewer-wrap');
+    if (s5wrap) {
+      let scale=1, bright=0.82, sat=1, glowStr='';
+      const bmap={bass:danceSmooth.bass,mid:danceSmooth.mid,treble:danceSmooth.treble,beat:danceSmooth.beat,
+                  piano:danceSmooth.piano,mezzoforte:danceSmooth.mezzoforte,forte:danceSmooth.forte};
+      const mvs=appState.movements;
+      if (mvs) {
+        for (const [key,cfg] of Object.entries(mvs)) {
+          if (!cfg||cfg.movement==='none') continue;
+          const v=(bmap[key]||0)*(cfg.intensity/10); if(v<0.01) continue;
+          if(cfg.movement==='open5fold'){scale=Math.max(scale,1+v*0.35);bright=Math.max(bright,0.82+v*1.0);sat=Math.max(sat,1+v*1.4);}
+          else if(cfg.movement==='open3fold'){scale=Math.max(scale,1+v*0.22);bright=Math.max(bright,0.82+v*0.70);}
+          else if(cfg.movement==='open2fold'){scale=Math.max(scale,1+v*0.14);bright=Math.max(bright,0.82+v*0.60);}
+          else if(cfg.movement==='pulse'){scale=Math.max(scale,1+v*0.28);bright=Math.max(bright,0.82+v*0.55);}
+          else if(cfg.movement==='wiggle'){scale=Math.max(scale,1+v*0.10);}
+        }
+        let a5=0,a3=0,a2=0;
+        for (const [key,cfg] of Object.entries(mvs)) {
+          const v=(bmap[key]||0)*((cfg?.intensity||5)/10);
+          if(cfg?.movement==='open5fold')a5=Math.max(a5,v);
+          if(cfg?.movement==='open3fold')a3=Math.max(a3,v);
+          if(cfg?.movement==='open2fold')a2=Math.max(a2,v);
+        }
+        const ga=Math.max(a5,a3,a2);
+        if(ga>0.04){
+          const gc=a5>=a3&&a5>=a2?'155,114,207':a3>=a2?'61,170,106':'232,98,74';
+          glowStr=`drop-shadow(0 0 ${Math.round(6+ga*35)}px rgba(${gc},${(ga*0.70).toFixed(2)}))`;
+        }
+      }
+      s5wrap.style.transition='transform 0.05s linear,filter 0.05s linear';
+      s5wrap.style.transform=`scale(${scale.toFixed(3)})`;
+      s5wrap.style.filter=`brightness(${bright.toFixed(2)}) saturate(${sat.toFixed(2)}) ${glowStr}`;
+    }
 
     s5DanceAnimId = requestAnimationFrame(s5Frame);
   }
