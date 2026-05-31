@@ -2233,19 +2233,8 @@ function initStage4() {
     }).join('');
   }
 
-  // Initialize card viewer if needed
-  if (!cardViewerInitialized) {
-    cardViewerInitialized = true;
-    initMolstar('molstar-card-slot').then(viewer => {
-      cardViewer = viewer;
-      if (virus) {
-        viewer.loadStructureFromUrl(
-          `https://files.rcsb.org/download/${virus.pdb}.cif`, 'mmcif'
-        ).then(() => removeHetComponents(viewer.plugin))
-         .catch(e => console.warn('Card viewer load:', e));
-      }
-    });
-  }
+  // mainViewer is moved to molstar-card-slot by the slotMap in showStage —
+  // no second viewer needed; applyCardVisualization uses mainViewer directly.
 }
 
 function updateCard(field, value) {
@@ -2285,10 +2274,10 @@ async function removeHetComponents(plugin) {
   } catch(e) { console.warn('removeHetComponents:', e); }
 }
 
-// Apply Mol* representation preset + color theme to the card viewer
+// Apply Mol* representation preset + color theme using mainViewer
 async function applyCardVisualization() {
-  if (!cardViewer) { showToast('3D view not ready yet — wait a moment'); return; }
-  const plugin = cardViewer.plugin;
+  if (!mainViewer) { showToast('3D view not ready yet — wait a moment'); return; }
+  const plugin = mainViewer.plugin;
   const preset  = document.getElementById('card-style-preset')?.value  || 'default';
   const colorBy = document.getElementById('card-color-by')?.value || 'default';
 
@@ -2323,19 +2312,18 @@ async function applyCardVisualization() {
 }
 
 async function captureCard() {
-  if (cardViewer) {
-    try {
-      const imgData = await cardViewer.plugin.helpers.viewportScreenshot?.getImageDataUri();
-      if (imgData) {
-        const slot = document.getElementById('molstar-card-slot');
-        slot.innerHTML = `<img src="${imgData}" style="width:100%;height:100%;object-fit:cover;">`;
-        appState.card.snapshot = imgData;
-        saveSession();
-        showToast('View captured!');
-      }
-    } catch(e) {
-      showToast('Capture failed. Try again.');
+  if (!mainViewer) { showToast('3D view not ready'); return; }
+  try {
+    const imgData = await mainViewer.plugin.helpers.viewportScreenshot?.getImageDataUri();
+    if (imgData) {
+      const slot = document.getElementById('molstar-card-slot');
+      slot.innerHTML = `<img src="${imgData}" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+      appState.card.snapshot = imgData;
+      saveSession();
+      showToast('View captured!');
     }
+  } catch(e) {
+    showToast('Capture failed. Try again.');
   }
 }
 
@@ -2523,7 +2511,7 @@ function showStage(n) {
   if (appState.currentStage === 3) stopStage3();
 
   // Move viewer to appropriate slot
-  const slotMap = { 0: null, 1: 'stage-1-viewer-slot', 2: null, 3: null, dance: 'stage-dance-viewer-slot', 4: null, 5: 'stage-5-viewer-slot' };
+  const slotMap = { 0: null, 1: 'stage-1-viewer-slot', 2: null, 3: null, dance: 'stage-dance-viewer-slot', 4: 'molstar-card-slot', 5: 'stage-5-viewer-slot' };
   const slot = slotMap[n];
   if (slot) {
     moveViewerToSlot(slot);
