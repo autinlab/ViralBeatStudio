@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="viewer/molstar.css">
 <script src="viewer/molstar.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -285,7 +286,7 @@ h1,h2,h3,h4{font-family:'Playfair Display',serif;}
 .dance-ico-eye{cursor:pointer;border:none;background:transparent;font-size:0.85rem;line-height:1;padding:1px 3px;border-radius:5px;opacity:0.7;transition:opacity .15s,background .15s;}
 .dance-ico-eye:hover{opacity:1;background:rgba(255,255,255,0.10);}
 .dance-ico-corner.collapsed{padding-bottom:7px;}
-.dance-ico-corner.collapsed #dance-ico-body{display:none;}
+.dance-ico-corner.collapsed .dance-ico-body{display:none;}
 .dance-section-label{font-size:0.68rem;text-transform:uppercase;letter-spacing:.06em;color:rgba(200,220,255,0.4);font-family:'Lora',serif;margin-bottom:8px;}
 .dance-assign-meter-row{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;}
 .dance-assign-meter-label{display:flex;justify-content:space-between;align-items:baseline;}
@@ -376,6 +377,7 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
 <div id="pres-overlay">
   <div class="pres-toolbar">
     <span style="color:white;font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;">ViralBeat Studio — Presentation</span>
+    <button class="pres-btn" id="pres-play-btn" onclick="togglePresPlay()">▶ Play</button>
     <button class="pres-btn" id="pres-loop-btn" onclick="togglePresLoop()">▶ Loop Axes</button>
     <button class="pres-exit-btn" onclick="exitPresentation()">✕ Exit</button>
   </div>
@@ -419,7 +421,9 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
       <div class="app-title">ViralBeat Studio</div>
       <div class="app-subtitle">Explore viral capsid symmetry through music synchronization</div>
     </div>
+    <button class="btn btn-secondary" onclick="pickSessionBundle()" style="margin-left:auto;align-self:center;">📂 Open Session</button>
   </div>
+  <input type="file" id="open-session-input" accept=".vbz,.zip" style="display:none;" onchange="openSessionBundle(this.files[0]); this.value='';">
   <div class="progress-bar" id="progress-bar"></div>
 </div>
 
@@ -952,7 +956,7 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
               <div class="dance-ico-title">SYMMETRY GUIDE</div>
               <button class="dance-ico-eye" id="dance-ico-eye" title="Hide guide" onclick="toggleGuideVisibility(event)">👁</button>
             </div>
-            <div id="dance-ico-body">
+            <div class="dance-ico-body" id="dance-ico-body">
               <div id="dance-ico-tnum" style="font-size:0.55rem;color:rgba(180,210,255,0.60);text-align:center;margin-bottom:2px;font-family:'Lora',serif;letter-spacing:.06em;"></div>
               <canvas id="dance-canvas" width="200" height="155"></canvas>
               <div class="dance-legend" style="padding:5px 0 0;">
@@ -1133,10 +1137,21 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
           <!-- Axis glow overlay -->
           <canvas id="s5-glow-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>
 
-          <!-- Symmetry guide — top-right corner -->
-          <div style="position:absolute;top:10px;right:10px;background:rgba(8,13,26,0.88);border:1px solid rgba(255,255,255,0.10);border-radius:10px;padding:6px 8px 4px;backdrop-filter:blur(3px);">
-            <div style="font-size:0.58rem;text-transform:uppercase;letter-spacing:.07em;color:rgba(200,220,255,0.45);font-family:'Lora',serif;text-align:center;margin-bottom:3px;">Symmetry Guide</div>
-            <canvas id="s5-dance-canvas" width="160" height="120" style="display:block;border-radius:6px;"></canvas>
+          <!-- Symmetry-axis icosahedron guide — draggable, collapsible overlay
+               (same widget as the Capsid Dance stage) -->
+          <div class="dance-ico-corner" id="s5-ico-corner">
+            <div class="dance-ico-header" id="s5-ico-header">
+              <div class="dance-ico-title">SYMMETRY GUIDE</div>
+              <button class="dance-ico-eye" id="s5-ico-eye" title="Hide guide" onclick="toggleGuideVisibility(event)">👁</button>
+            </div>
+            <div class="dance-ico-body" id="s5-ico-body">
+              <canvas id="s5-dance-canvas" width="200" height="155" style="display:block;"></canvas>
+              <div class="dance-legend" style="padding:5px 0 0;">
+                <span class="dance-legend-item"><span class="dance-legend-dot" style="background:#E8624A;"></span><span style="color:#E8624A;">2-fold</span></span>
+                <span class="dance-legend-item"><span class="dance-legend-dot" style="background:#3DAA6A;"></span><span style="color:#3DAA6A;">3-fold</span></span>
+                <span class="dance-legend-item"><span class="dance-legend-dot" style="background:#9B72CF;"></span><span style="color:#9B72CF;">5-fold</span></span>
+              </div>
+            </div>
           </div>
 
           <!-- Virus name label -->
@@ -1158,8 +1173,13 @@ hr.divider{border:none;border-top:1px solid var(--cream-dark);margin:16px 0;}
 
       <div class="section-title mb-12">Export Options</div>
       <div class="export-btns">
-        <button class="btn btn-primary" onclick="downloadJSON()">⬇ Download JSON</button>
+        <button class="btn btn-primary" onclick="saveSessionBundle()">💾 Save Session (.vbz)</button>
+        <button class="btn btn-secondary" onclick="pickSessionBundle()">📂 Open Session</button>
         <button class="btn btn-sky" onclick="downloadCardPNG()">🖼 Download Card PNG</button>
+      </div>
+      <p class="text-sm text-light" style="margin-top:8px;">The <strong>.vbz</strong> bundle holds your capsid, representation, mapping and audio in one file — open it to present the dance offline.</p>
+      <div class="export-btns" style="margin-top:10px;">
+        <button class="btn btn-lavender" onclick="downloadJSON()">⬇ JSON only</button>
         <button class="btn btn-lavender" onclick="copyShareLink()">🔗 Copy Share Link</button>
       </div>
       <hr class="divider">
@@ -2415,131 +2435,76 @@ function initStage5() {
     }
   }
 
-  // Sync play button state with audio element
-  const audioEl = document.getElementById('audio-el');
+  // Reset play-button text; live state is polled from Mol* in s5Frame.
   const pb = document.getElementById('s5-play-btn');
-  if (pb) pb.textContent = (audioEl && !audioEl.paused) ? '⏸ Pause' : '▶ Play';
-  if (audioEl) {
-    const scr = document.getElementById('s5-scrubber');
-    if (scr && audioEl.duration) { scr.max = audioEl.duration; scr.value = audioEl.currentTime; }
-    audioEl.addEventListener('timeupdate', () => {
-      if (s5Scrubbing || appState.currentStage !== 5) return;
-      const s = document.getElementById('s5-scrubber');
-      const t = document.getElementById('s5-time');
-      if (s) s.value = audioEl.currentTime;
-      if (t) t.textContent = formatTime(audioEl.currentTime);
-    });
-    audioEl.addEventListener('ended', () => {
-      const b = document.getElementById('s5-play-btn');
-      if (b) b.textContent = '▶ Play';
-    });
-  }
+  if (pb) pb.textContent = '▶ Play';
 
-  // Capture camera base radius and stop autonomous spin
+  // Enter-camera: mirror the Capsid Dance stage — reset to front, zoom out so the
+  // full capsid is framed, then disable autonomous trackball spin. Real molecular
+  // motion is driven inside Mol* by applyMovementsToMolstar() on play; we never
+  // fake it with CSS transforms or manual camera writes here.
   appState.danceBaseRadius = null;
   setTimeout(() => {
-    try {
-      const r = mainViewer?.plugin?.canvas3d?.camera?.state?.radius;
-      if (r) appState.danceBaseRadius = r;
-      mainViewer?.plugin?.canvas3d?.setProps({ trackball: { animate: { name: 'off', params: {} } } });
-    } catch(e) {}
-  }, 350);
+    try { mainViewer?.plugin?.canvas3d?.requestCameraReset(); } catch(e) {}
+    setTimeout(() => {
+      try {
+        const cam = mainViewer?.plugin?.canvas3d?.camera;
+        const r = cam?.state?.radius;
+        if (r && cam) { cam.state.radius = r * 1.7; cam.setState?.({ ...cam.state }); }
+      } catch(e) {}
+      try { mainViewer?.plugin?.canvas3d?.setProps({ trackball: { animate: { name: 'off', params: {} } } }); } catch(e) {}
+    }, 400);
+  }, 100);
 
-  // Start mini dance + spectrum loop
+  // Make the symmetry guide draggable (same widget as the Dance stage).
+  initGuideDrag('s5-ico-corner', 's5-ico-header');
+
+  // Start the mini-dance overlay loop (guide + spectrum + glow), driven by the
+  // SAME Mol* audio-reactive frame as the Dance stage.
   cancelAnimationFrame(s5DanceAnimId);
   s5M = [1,0,0, 0,1,0, 0,0,1];
   const Ry5 = (() => { const s=0.005,c=Math.cos(s),si=Math.sin(s); return [c,0,si,0,1,0,-si,0,c]; })();
 
   function s5Frame() {
-    // Update audio bands into danceSmooth
-    const raw = danceGetBands();
-    const alpha = 0.25;
-    const keys = ['bass','mid','treble','beat','piano','mezzoforte','forte'];
-    keys.forEach(k => {
-      const r = raw[k] || 0;
-      danceSmooth[k] = Math.max(r, (danceSmooth[k]||0)*0.82)*(1-alpha) + r*alpha;
-    });
+    // Self-cancel once we've navigated away (goToStage sets currentStage before
+    // showStage, so the leave path can't stop us — guard here instead).
+    if (appState.currentStage !== 5) { s5DanceAnimId = null; return; }
+    const ar = mainViewer?.plugin?.managers?.audioReactive;
 
-    // Spin and draw symmetry guide
+    // Audio bands from Mol*'s live analysis frame (single shared audio source) —
+    // identical smoothing to danceLoop so the overlays match the Dance stage.
+    const raw = danceFrameFromMolstar();
+    const alpha = 0.25;
+    danceSmooth.bass   = Math.max(raw.bass,   danceSmooth.bass   * 0.82) * (1-alpha) + raw.bass   * alpha;
+    danceSmooth.mid    = Math.max(raw.mid,    danceSmooth.mid    * 0.82) * (1-alpha) + raw.mid    * alpha;
+    danceSmooth.treble = Math.max(raw.treble, danceSmooth.treble * 0.82) * (1-alpha) + raw.treble * alpha;
+    danceSmooth.beat   = Math.max(raw.beat,   danceSmooth.beat   * 0.70) * (1-alpha) + raw.beat   * alpha;
+    danceSmooth.piano      = Math.max(raw.piano,      danceSmooth.piano      * 0.78) * (1-alpha) + raw.piano      * alpha;
+    danceSmooth.mezzoforte = Math.max(raw.mezzoforte, danceSmooth.mezzoforte * 0.80) * (1-alpha) + raw.mezzoforte * alpha;
+    danceSmooth.forte      = Math.max(raw.forte,      danceSmooth.forte      * 0.82) * (1-alpha) + raw.forte      * alpha;
+
+    // Spin + draw the 2D symmetry guide (the capsid itself is moved by Mol*).
     s5M = s5MulM3(Ry5, s5M);
     const dc = document.getElementById('s5-dance-canvas');
-    if (dc && window.drawDodecFrame) window.drawDodecFrame(dc, s5M, danceSmooth, appState.movements, true);
+    if (dc && window.drawDodecFrame) window.drawDodecFrame(dc, s5M, danceSmooth, appState.movements);
 
-    // Draw frequency spectrum
-    const sc = document.getElementById('s5-spectrum-canvas');
-    if (sc && danceAnalyser) {
-      const W = sc.offsetWidth; const H = sc.offsetHeight || 48;
-      if (sc.width !== W || sc.height !== H) { sc.width = W; sc.height = H; }
-      const ctx = sc.getContext('2d'); ctx.clearRect(0,0,W,H);
-      const data = new Uint8Array(danceAnalyser.frequencyBinCount);
-      danceAnalyser.getByteFrequencyData(data);
-      const BARS = 72, bW = W/BARS, mvs = appState.movements;
-      const MV_RGB = { open5fold:[155,114,207], open3fold:[61,170,106], open2fold:[232,98,74], wiggle:[232,196,74], pulse:[74,181,232] };
-      const bassEnd = Math.floor(data.length*freqSplitBassM), midEnd = Math.floor(data.length*freqSplitMidT);
-      for (let i=0;i<BARS;i++) {
-        const bin = Math.floor(i/BARS*data.length*0.60);
-        const val = data[bin]/255; if (val<0.015) continue;
-        const band = bin<bassEnd?'bass':bin<midEnd?'mid':'treble';
-        const [r,g,b] = MV_RGB[mvs?.[band]?.movement]||[110,150,195];
-        const h = val*H*0.9, x = i*bW;
-        const grad = ctx.createLinearGradient(x,H-h,x,H);
-        grad.addColorStop(0,`rgba(${r},${g},${b},0.9)`);
-        grad.addColorStop(1,`rgba(${r},${g},${b},0.05)`);
-        ctx.fillStyle = grad; ctx.fillRect(x+0.5,H-h,bW-1,h);
-      }
-    }
+    // Reuse the Dance stage overlays, reading the same Mol* spectrum.
+    drawFreqViz('s5-spectrum-canvas');
+    drawAxisGlow('s5-glow-canvas');
 
-    // ── Mol* camera sync from s5M (same as danceLoop uses danceM) ─────────
-    try {
-      const cam = mainViewer?.plugin?.canvas3d?.camera;
-      if (cam && cam.state && appState.danceBaseRadius) {
-        const base = appState.danceBaseRadius;
-        const tgt  = cam.state.target;
-        const tx2  = tgt?.[0]||0, ty2 = tgt?.[1]||0, tz2 = tgt?.[2]||0;
-        const r    = cam.state.radius ?? base;
-        const px = s5M[2]*r + tx2, py = s5M[5]*r + ty2, pz = s5M[8]*r + tz2;
-        const pos = cam.state.position, up = cam.state.up;
-        if (pos && up) {
-          pos[0]=px; pos[1]=py; pos[2]=pz;
-          up[0]=s5M[1]; up[1]=s5M[4]; up[2]=s5M[7];
-          cam.setState?.({ ...cam.state });
-        }
+    // Poll Mol* audio for scrubber/time + play-button text. Leak-free: no
+    // per-init listeners — the rAF loop is the single source of truth, and the
+    // button reflects the manager's playing flag so it never desyncs across stages.
+    if (ar) {
+      const ap = ar.state.audioPlayer.value;
+      if (ap && !s5Scrubbing) {
+        const scr = document.getElementById('s5-scrubber');
+        const tm  = document.getElementById('s5-time');
+        if (scr && ap.duration) { scr.max = ap.duration; scr.value = ap.currentTime; }
+        if (tm) tm.textContent = formatTime(ap.currentTime || 0);
       }
-    } catch(e) {}
-
-    // ── CSS fold-axis effects on Stage 5 viewer wrapper ────────────────────
-    const s5wrap = document.getElementById('s5-viewer-wrap');
-    if (s5wrap) {
-      let scale=1, bright=0.82, sat=1, glowStr='';
-      const bmap={bass:danceSmooth.bass,mid:danceSmooth.mid,treble:danceSmooth.treble,beat:danceSmooth.beat,
-                  piano:danceSmooth.piano,mezzoforte:danceSmooth.mezzoforte,forte:danceSmooth.forte};
-      const mvs=appState.movements;
-      if (mvs) {
-        for (const [key,cfg] of Object.entries(mvs)) {
-          if (!cfg||cfg.movement==='none') continue;
-          const v=(bmap[key]||0)*(cfg.intensity/10); if(v<0.01) continue;
-          if(cfg.movement==='open5fold'){scale=Math.max(scale,1+v*0.35);bright=Math.max(bright,0.82+v*1.0);sat=Math.max(sat,1+v*1.4);}
-          else if(cfg.movement==='open3fold'){scale=Math.max(scale,1+v*0.22);bright=Math.max(bright,0.82+v*0.70);}
-          else if(cfg.movement==='open2fold'){scale=Math.max(scale,1+v*0.14);bright=Math.max(bright,0.82+v*0.60);}
-          else if(cfg.movement==='pulse'){scale=Math.max(scale,1+v*0.28);bright=Math.max(bright,0.82+v*0.55);}
-          else if(cfg.movement==='wiggle'){scale=Math.max(scale,1+v*0.10);}
-        }
-        let a5=0,a3=0,a2=0;
-        for (const [key,cfg] of Object.entries(mvs)) {
-          const v=(bmap[key]||0)*((cfg?.intensity||5)/10);
-          if(cfg?.movement==='open5fold')a5=Math.max(a5,v);
-          if(cfg?.movement==='open3fold')a3=Math.max(a3,v);
-          if(cfg?.movement==='open2fold')a2=Math.max(a2,v);
-        }
-        const ga=Math.max(a5,a3,a2);
-        if(ga>0.04){
-          const gc=a5>=a3&&a5>=a2?'155,114,207':a3>=a2?'61,170,106':'232,98,74';
-          glowStr=`drop-shadow(0 0 ${Math.round(6+ga*35)}px rgba(${gc},${(ga*0.70).toFixed(2)}))`;
-        }
-      }
-      s5wrap.style.transition='transform 0.05s linear,filter 0.05s linear';
-      s5wrap.style.transform=`scale(${scale.toFixed(3)})`;
-      s5wrap.style.filter=`brightness(${bright.toFixed(2)}) saturate(${sat.toFixed(2)}) ${glowStr}`;
+      const btn = document.getElementById('s5-play-btn');
+      if (btn) btn.textContent = ar.state.status.value.playing ? '⏸ Pause' : '▶ Play';
     }
 
     s5DanceAnimId = requestAnimationFrame(s5Frame);
@@ -2547,34 +2512,52 @@ function initStage5() {
   s5Frame();
 }
 
-function toggleS5Audio() {
-  const audioEl = document.getElementById('audio-el');
+// Drive Stage 5 playback through Mol*'s audio-reactive manager — the SAME path
+// as the Dance stage (toggleDancePlay), so the real capsid dances. Shares the
+// single audio source and danceAudioLoaded flag with the Dance stage.
+async function toggleS5Audio() {
+  if (!mainViewer || !appState.audioFile) { showToast('No track loaded'); return; }
+  const ar = mainViewer.plugin.managers.audioReactive;
   const btn = document.getElementById('s5-play-btn');
-  if (!audioEl || !appState.audioFile) { showToast('No track loaded'); return; }
-  // Ensure audio analyser is set up (reuse dance stage setup)
-  if (!danceAudioCtx) {
-    danceAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    danceAnalyser = danceAudioCtx.createAnalyser();
-    danceAnalyser.fftSize = 512;
-  }
-  if (!danceAudioSource) {
-    try {
-      danceAudioSource = danceAudioCtx.createMediaElementSource(audioEl);
-      danceAudioSource.connect(danceAnalyser);
-      danceAnalyser.connect(danceAudioCtx.destination);
-    } catch(e) {}
-  }
-  if (audioEl.paused) {
-    danceAudioCtx.resume().then(() => audioEl.play().catch(()=>{}));
-    if (btn) btn.textContent = '⏸ Pause';
-  } else {
-    audioEl.pause();
+
+  if (ar.state.status.value.playing) {
+    ar.pause();
     if (btn) btn.textContent = '▶ Play';
+    return;
   }
+
+  // Load the track into Mol*'s own audio element (never #audio-el, which belongs
+  // to the Stage-3 preview). Shared with the Dance stage via danceAudioLoaded.
+  if (!danceAudioLoaded) {
+    try {
+      if (appState.audioFile instanceof File) await ar.loadFile(appState.audioFile);
+      else { const el = document.getElementById('audio-el'); if (el && el.src) await ar.loadUrl(el.src, appState.trackName || 'track'); }
+      danceAudioLoaded = true;
+    } catch(e) { console.warn('Mol* audio load failed:', e); }
+  }
+  // (Re)apply the Stage-3 mapping so slider/movement edits take effect, then play.
+  await applyMovementsToMolstar();
+  startBeatCycle();
+  try {
+    await ar.play();
+    if (btn) btn.textContent = '⏸ Pause';
+  } catch(e) { console.warn('Mol* audio play failed:', e); }
 }
 function s5ScrubStart() { s5Scrubbing = true; }
-function s5ScrubEnd()   { s5Scrubbing = false; const ae = document.getElementById('audio-el'), s = document.getElementById('s5-scrubber'); if(ae&&s) ae.currentTime = parseFloat(s.value); }
-function s5SeekAudio(v) { const t = document.getElementById('s5-time'); if(t) t.textContent = formatTime(parseFloat(v)); }
+function s5ScrubEnd()   { s5Scrubbing = false; const ap = mainViewer?.plugin?.managers?.audioReactive?.state?.audioPlayer?.value, s = document.getElementById('s5-scrubber'); if (ap && s) ap.currentTime = parseFloat(s.value); }
+function s5SeekAudio(v) { const t = document.getElementById('s5-time'); if (t) t.textContent = formatTime(parseFloat(v)); }
+
+// Symmetric teardown for Stage 5 — mirrors stopDanceStage so we never hand a
+// live audio-reactive manager to the next stage with two owners.
+function stopStage5() {
+  cancelAnimationFrame(s5DanceAnimId);
+  s5DanceAnimId = null;
+  stopBeatCycle();
+  try { mainViewer?.plugin?.managers?.audioReactive?.pause(); } catch(e) {}
+  try { mainViewer?.plugin?.canvas3d?.setProps({ trackball: { animate: { name: 'off', params: {} } } }); } catch(e) {}
+  const w = document.getElementById('s5-viewer-wrap');
+  if (w) { w.style.filter = ''; w.style.transform = ''; w.style.transition = ''; }
+}
 
 function updateStudentName(val) {
   appState.studentName = val;
@@ -2601,6 +2584,7 @@ function buildSessionObject() {
     virus: appState.selectedVirus,
     trackName: appState.trackName,
     mappings: appState.mappings,
+    movements: appState.movements, // band→movement mapping that actually drives the dance
     card: { ...appState.card, snapshot: '' }, // omit snapshot from JSON
     completedStages: [...appState.completedStages]
   };
@@ -2638,9 +2622,140 @@ function downloadCardPNG() {
 
 function copyShareLink() {
   const session = buildSessionObject();
-  const encoded = btoa(JSON.stringify(session));
-  const url = window.location.origin + window.location.pathname + '?session=' + encoded;
-  navigator.clipboard.writeText(url).then(() => showToast('Share link copied!'));
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(session))));
+  const base = (window.location.origin && window.location.origin !== 'null')
+    ? window.location.origin + window.location.pathname
+    : window.location.href.split('?')[0];
+  const url = base + '?session=' + encoded;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(url).then(() => showToast('Share link copied!'),
+                                            () => showToast('Copy failed — use Save Session instead'));
+  } else {
+    showToast('Clipboard unavailable — use Save Session instead');
+  }
+}
+
+// ============================================================
+// SELF-CONTAINED SESSION BUNDLE (.vbz)
+// A plain zip carrying: session.json (metadata + the band→movement mapping),
+// state.molx (the full Mol* scene — structure, representation, camera and the
+// audio-reactive animation params, embedded so it opens offline), and the audio
+// file. A teacher opens it and lands straight in Present-to-Class.
+// ============================================================
+async function saveSessionBundle() {
+  if (typeof fflate === 'undefined') { showToast('Zip library not loaded'); return; }
+  if (!mainViewer) { showToast('3D viewer not ready'); return; }
+  showToast('Building session bundle…');
+  const files = {};
+  const meta = buildSessionObject();
+
+  // 1. The Mol* scene as an embedded molx (zip blob — opaque to us, fed back to
+  //    managers.snapshot.open on load).
+  try {
+    // data:true embeds the full state tree; the molx branch also bundles every
+    // managers.asset entry (the loadPdb download), so the structure travels with
+    // the file and the scene opens offline.
+    const molxBlob = await mainViewer.plugin.managers.snapshot.serialize({ type: 'molx', params: { data: true } });
+    files['state.molx'] = new Uint8Array(await molxBlob.arrayBuffer());
+  } catch(e) { console.warn('molx serialize failed', e); }
+
+  // 2. The audio file, recorded in meta so import knows the entry + mime type.
+  if (appState.audioFile instanceof File) {
+    const safe = appState.audioFile.name.replace(/[^\w.\-]+/g, '_');
+    files['audio/' + safe] = new Uint8Array(await appState.audioFile.arrayBuffer());
+    meta.audioFile = { name: safe, type: appState.audioFile.type || 'audio/mpeg' };
+  }
+
+  // 3. Metadata last, now that meta.audioFile is set.
+  files['session.json'] = fflate.strToU8(JSON.stringify(meta, null, 2));
+
+  // Store-level (level 0): molx + audio are already compressed, so this is fast
+  // and avoids re-deflating large binaries.
+  const zipped = fflate.zipSync(files, { level: 0 });
+  const blob = new Blob([zipped], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const virusName = appState.selectedVirus ? appState.selectedVirus.name.replace(/\s+/g,'_') : 'Session';
+  a.href = url;
+  a.download = `${virusName}_${meta.date}.vbz`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Session bundle saved!');
+}
+
+function pickSessionBundle() {
+  document.getElementById('open-session-input')?.click();
+}
+
+async function openSessionBundle(file) {
+  if (!file) return;
+  if (typeof fflate === 'undefined') { showToast('Zip library not loaded'); return; }
+  try {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const entries = fflate.unzipSync(buf);
+    if (!entries['session.json']) { showToast('Not a ViralBeat session'); return; }
+    const meta = JSON.parse(fflate.strFromU8(entries['session.json']));
+
+    // Make sure the app shell is showing (a teacher may open from a fresh load).
+    document.getElementById('readonly-view')?.classList.remove('visible');
+    document.getElementById('app-root').style.display = 'block';
+
+    // Restore app state.
+    applySessionMeta(meta);
+
+    // A teacher may open immediately on page load — wait for the viewer to finish
+    // initializing (up to ~10s) before restoring the scene/audio.
+    if (!(molstarReady && mainViewer)) {
+      showToast('Loading 3D viewer…');
+      for (let i = 0; i < 100 && !(molstarReady && mainViewer); i++) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+    }
+
+    // Restore the Mol* scene from the embedded molx (rebuilds structure + reps +
+    // camera + per-repr animation params).
+    if (entries['state.molx'] && mainViewer) {
+      try {
+        const molxFile = new File([entries['state.molx']], 'state.molx', { type: 'application/zip' });
+        await mainViewer.plugin.managers.snapshot.open(molxFile);
+      } catch(e) { console.warn('molx open failed', e); }
+    }
+
+    // Restore the audio into both #audio-el and Mol*'s audio-reactive manager.
+    danceAudioLoaded = false;
+    if (meta.audioFile && entries['audio/' + meta.audioFile.name]) {
+      const ab = entries['audio/' + meta.audioFile.name];
+      const af = new File([ab], meta.audioFile.name, { type: meta.audioFile.type });
+      appState.audioFile = af;
+      const el = document.getElementById('audio-el');
+      if (el) el.src = URL.createObjectURL(af);
+      try {
+        await mainViewer.plugin.managers.audioReactive.loadFile(af);
+        danceAudioLoaded = true;
+      } catch(e) { console.warn('audio load failed', e); }
+    }
+
+    // Re-apply the mapping so the manager params (not carried in molx) are set.
+    try { await applyMovementsToMolstar(); } catch(e) {}
+
+    showToast('Session loaded — presenting');
+    appState.currentStage = 5;            // keep slot logic consistent on exit
+    enterPresentation();                  // drop the teacher straight into the show
+  } catch(e) {
+    console.error('Open session failed', e);
+    showToast('Could not open session file');
+  }
+}
+
+// Apply decoded session metadata onto appState + the resumable UI.
+function applySessionMeta(meta) {
+  if (meta.virus) appState.selectedVirus = meta.virus;
+  if (meta.mappings) Object.assign(appState.mappings, meta.mappings);
+  if (meta.movements) appState.movements = meta.movements;
+  if (meta.card) Object.assign(appState.card, meta.card);
+  if (meta.studentName) appState.studentName = meta.studentName;
+  if (meta.trackName) appState.trackName = meta.trackName;
+  if (meta.completedStages) appState.completedStages = new Set(meta.completedStages);
 }
 
 // ============================================================
@@ -2683,6 +2798,37 @@ function enterPresentation() {
     try { mainViewer?.plugin?.canvas3d?.requestCameraReset(); } catch(e) {}
     redrawAxisCanvas();
   }, 200);
+
+  // Auto-start the audio-reactive dance (the entry click is a user gesture).
+  const pb = document.getElementById('pres-play-btn');
+  if (pb) pb.textContent = '▶ Play';
+  presStartAudio();
+}
+
+// Load (if needed) → apply the mapping → play the capsid dance in presentation.
+async function presStartAudio() {
+  const ar = mainViewer?.plugin?.managers?.audioReactive;
+  if (!ar || !appState.audioFile) return;
+  const btn = document.getElementById('pres-play-btn');
+  if (!danceAudioLoaded) {
+    try {
+      if (appState.audioFile instanceof File) await ar.loadFile(appState.audioFile);
+      else { const el = document.getElementById('audio-el'); if (el && el.src) await ar.loadUrl(el.src, appState.trackName || 'track'); }
+      danceAudioLoaded = true;
+    } catch(e) { console.warn('pres audio load failed', e); }
+  }
+  try { await applyMovementsToMolstar(); } catch(e) {}
+  startBeatCycle();
+  try { await ar.play(); if (btn) btn.textContent = '⏸ Pause'; }
+  catch(e) { if (btn) btn.textContent = '▶ Play'; }
+}
+
+async function togglePresPlay() {
+  const ar = mainViewer?.plugin?.managers?.audioReactive;
+  if (!ar || !appState.audioFile) { showToast('No audio in this session'); return; }
+  const btn = document.getElementById('pres-play-btn');
+  if (ar.state.status.value.playing) { ar.pause(); if (btn) btn.textContent = '▶ Play'; return; }
+  presStartAudio();
 }
 
 function togglePresLoop() {
@@ -2715,8 +2861,15 @@ function exitPresentation() {
   document.getElementById('pres-loop-btn').textContent = '▶ Loop Axes';
   document.getElementById('pres-loop-btn').classList.remove('active-btn');
   document.getElementById('pres-overlay').classList.remove('visible');
-  // Move viewer back to stage 5
-  moveViewerToSlot('stage-5-viewer-slot');
+  // Stop the audio-reactive dance.
+  try { mainViewer?.plugin?.managers?.audioReactive?.pause(); } catch(e) {}
+  stopBeatCycle();
+  const pb = document.getElementById('pres-play-btn');
+  if (pb) pb.textContent = '▶ Play';
+  // Land cleanly on Stage 5 (also handles the case where the session was opened
+  // straight into presentation, so the welcome page isn't left active underneath).
+  if (appState.selectedVirus) goToStage(5);
+  else moveViewerToSlot('stage-5-viewer-slot');
 }
 
 // ============================================================
@@ -2748,7 +2901,7 @@ function showStage(n) {
   if (appState.currentStage === 3) stopStage3();
   // Stop Stage 5 mini-dance and return trading card to Stage 4
   if (appState.currentStage === 5) {
-    cancelAnimationFrame(s5DanceAnimId); s5DanceAnimId = null;
+    stopStage5();
     const card = document.getElementById('trading-card');
     const s4 = document.querySelector('#stage-4 .stage4-layout > div:first-child');
     if (card && s4 && !s4.contains(card)) s4.insertBefore(card, s4.firstChild);
@@ -2828,6 +2981,7 @@ function saveSession() {
     activeHost: appState.activeHost,
     axisToggles: appState.axisToggles,
     mappings: appState.mappings,
+    movements: appState.movements,
     card: appState.card,
     studentName: appState.studentName,
     trackName: appState.trackName
@@ -2843,6 +2997,7 @@ function resumeSession() {
     if (data.selectedVirus) appState.selectedVirus = data.selectedVirus;
     if (data.completedStages) appState.completedStages = new Set(data.completedStages);
     if (data.mappings) Object.assign(appState.mappings, data.mappings);
+    if (data.movements) appState.movements = data.movements;
     if (data.card) Object.assign(appState.card, data.card);
     if (data.studentName) appState.studentName = data.studentName;
     if (data.trackName) appState.trackName = data.trackName;
@@ -3836,7 +3991,7 @@ let foldCycleOrders = [];         // assigned fold orders (2/3/5) to beat-cycle 
 let foldCycleIndex = 0;
 let beatTriggerActive = false;    // rising-edge state for beat detection
 let audioStatusSub = null;        // subscription to audioReactive status (beat cycle)
-let guideDragInit = false;        // symmetry-guide drag handlers bound once
+let guideDragInit = new Set();    // symmetry-guide drag handlers bound once per corner id
 
 function initDanceStage() {
   // Show virus name
@@ -3876,7 +4031,7 @@ function initDanceStage() {
   buildDanceAssignMeters();
 
   // Enable dragging the symmetry guide (handlers bound once).
-  initGuideDrag();
+  initGuideDrag('dance-ico-corner', 'dance-ico-header');
 
   // Reset danceM so overlay and Mol* camera start aligned (identity = front view)
   danceM = [1,0,0, 0,1,0, 0,0,1];
@@ -3955,22 +4110,25 @@ function danceGetBands() {
 }
 
 // Eye icon: toggle the symmetry guide's body (header + drag handle stay).
+// Id-agnostic — derives the corner/eye from the clicked button so the same
+// handler serves both the Dance stage and Stage 5 guides.
 function toggleGuideVisibility(e) {
   if (e) e.stopPropagation();
-  const corner = document.getElementById('dance-ico-corner');
-  const eye = document.getElementById('dance-ico-eye');
+  const eye = e?.currentTarget;
+  const corner = eye?.closest('.dance-ico-corner');
   if (!corner) return;
   const collapsed = corner.classList.toggle('collapsed');
   if (eye) { eye.textContent = collapsed ? '🙈' : '👁'; eye.title = collapsed ? 'Show guide' : 'Hide guide'; }
 }
 
-// Make the symmetry guide draggable within the dance viewer (header = handle).
-function initGuideDrag() {
-  if (guideDragInit) return;
-  const corner = document.getElementById('dance-ico-corner');
-  const header = document.getElementById('dance-ico-header');
+// Make a symmetry guide draggable within its viewer wrap (header = handle).
+// Handlers are bound once per corner id (guideDragInit is a Set of done ids).
+function initGuideDrag(cornerId = 'dance-ico-corner', headerId = 'dance-ico-header') {
+  if (guideDragInit.has(cornerId)) return;
+  const corner = document.getElementById(cornerId);
+  const header = document.getElementById(headerId);
   if (!corner || !header) return;
-  guideDragInit = true;
+  guideDragInit.add(cornerId);
 
   let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
   header.addEventListener('pointerdown', e => {
@@ -4102,8 +4260,8 @@ function buildDanceAssignMeters() {
 // ── Frequency spectrum visualizer ──────────────────────────────────────
 // Draws 96 coloured vertical bars at the bottom of the dance viewer.
 // Each bar is coloured by which fold-axis movement handles that frequency range.
-function drawFreqViz() {
-  const fc = document.getElementById('freq-canvas');
+function drawFreqViz(canvasId = 'freq-canvas') {
+  const fc = document.getElementById(canvasId);
   if (!fc) return;
   const W = fc.offsetWidth, H = fc.offsetHeight;
   if (!W || !H) return;
@@ -4160,8 +4318,8 @@ function drawFreqViz() {
 // ── Axis glow ring ──────────────────────────────────────────────────────
 // Paints a soft radial halo around the capsid in the colour of whichever
 // fold axes are currently active, fading in/out with the music amplitude.
-function drawAxisGlow() {
-  const gc = document.getElementById('glow-canvas');
+function drawAxisGlow(canvasId = 'glow-canvas') {
+  const gc = document.getElementById(canvasId);
   if (!gc) return;
   const W = gc.offsetWidth, H = gc.offsetHeight;
   if (!W || !H) return;
@@ -4523,7 +4681,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const sessionParam = params.get('session');
   if (sessionParam) {
     try {
-      const data = JSON.parse(atob(sessionParam));
+      const data = JSON.parse(decodeURIComponent(escape(atob(sessionParam))));
       renderReadonlyView(data);
       return;
     } catch(e) {
