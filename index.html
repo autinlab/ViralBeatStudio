@@ -2648,6 +2648,9 @@ async function saveSessionBundle() {
   showToast('Building session bundle…');
   const files = {};
   const meta = buildSessionObject();
+  // Keep the captured card image in the bundle (it's a local file, so the size
+  // of the data URI is fine) — avoids a re-capture race on load.
+  meta.card = { ...meta.card, snapshot: appState.card.snapshot || '' };
 
   // 1. The Mol* scene as an embedded molx (zip blob — opaque to us, fed back to
   //    managers.snapshot.open on load).
@@ -2718,7 +2721,9 @@ async function openSessionBundle(file) {
       try {
         const molxFile = new File([entries['state.molx']], 'state.molx', { type: 'application/zip' });
         await mainViewer.plugin.managers.snapshot.open(molxFile);
-      } catch(e) { console.warn('molx open failed', e); }
+      } catch(e) { console.warn('molx open failed', e); showToast('3D scene failed to load'); }
+    } else if (!entries['state.molx']) {
+      console.warn('bundle has no state.molx');
     }
 
     // Restore the audio into both #audio-el and Mol*'s audio-reactive manager.
@@ -2738,9 +2743,13 @@ async function openSessionBundle(file) {
     // Re-apply the mapping so the manager params (not carried in molx) are set.
     try { await applyMovementsToMolstar(); } catch(e) {}
 
-    showToast('Session loaded — presenting');
-    appState.currentStage = 5;            // keep slot logic consistent on exit
-    enterPresentation();                  // drop the teacher straight into the show
+    // Populate the trading-card fields from the restored state, then land on
+    // Stage 5 — it shows the full card + the dancing capsid + a "Present to
+    // Class" button (which is the link into presentation mode). goToStage(5)
+    // also unhides/mounts the viewer via moveViewerToSlot.
+    initStage4();
+    goToStage(5);
+    showToast('Session loaded');
   } catch(e) {
     console.error('Open session failed', e);
     showToast('Could not open session file');
